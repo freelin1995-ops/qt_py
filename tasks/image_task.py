@@ -3,6 +3,8 @@ from ui_common import BaseForm, BoolField, TextField, EnumField, IntField, watch
 
 class ImageCompressForm(BaseForm):
     task_type = "image_compress"
+    description = "压缩图片文件，支持智能质量/固定码率两种模式，可添加图片水印。"
+    schematic = "images/compress_schematic.png"
 
     enable_watermark = BoolField(label="添加图片水印", default=False)
     watermark_text = TextField(label="水印文字", default="CopyRight")

@@ -25,6 +25,7 @@
 #include <QJsonParseError>
 #include <QDir>
 #include <QFileInfo>
+#include <QSplitter>
 
 namespace py = pybind11;
 
@@ -213,29 +214,78 @@ public:
         : QWidget(parent)
     {
         setWindowTitle("Qt + Python 动态表单系统");
-        resize(700, 500);
+        resize(950, 550);
 
         auto* mainLayout = new QVBoxLayout(this);
-        auto* contentLayout = new QHBoxLayout;
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+
+        auto* vSplitter = new QSplitter(Qt::Vertical, this);
+
+        auto* hSplitter = new QSplitter(Qt::Horizontal, this);
+        hSplitter->setChildrenCollapsible(false);
 
         m_taskList = new QListWidget(this);
         m_taskList->setFixedWidth(180);
 
-        auto* scrollArea = new QScrollArea(this);
-        scrollArea->setWidgetResizable(true);
+        auto* formScroll = new QScrollArea(this);
+        formScroll->setWidgetResizable(true);
         m_stack = new QStackedWidget;
-        scrollArea->setWidget(m_stack);
+        formScroll->setWidget(m_stack);
 
-        contentLayout->addWidget(m_taskList);
-        contentLayout->addWidget(scrollArea, 1);
-        mainLayout->addLayout(contentLayout);
+        m_infoPanel = new QWidget(this);
+        m_infoPanel->setMinimumWidth(200);
+        auto* infoLayout = new QVBoxLayout(m_infoPanel);
+        infoLayout->setContentsMargins(10, 15, 10, 10);
 
-        m_submitBtn = new QPushButton("提交配置", this);
-        mainLayout->addWidget(m_submitBtn);
+        m_infoTitle = new QLabel(m_infoPanel);
+        m_infoTitle->setStyleSheet("font-size: 16px; font-weight: bold;");
+        m_infoTitle->setWordWrap(true);
 
-        m_resultLabel = new QLabel("等待提交...", this);
+        auto* separator = new QFrame(m_infoPanel);
+        separator->setFrameShape(QFrame::HLine);
+        separator->setFrameShadow(QFrame::Sunken);
+
+        m_infoDescription = new QLabel(m_infoPanel);
+        m_infoDescription->setWordWrap(true);
+        m_infoDescription->setStyleSheet("color: #444;");
+
+        m_infoSchematic = new QLabel(m_infoPanel);
+        m_infoSchematic->setAlignment(Qt::AlignCenter);
+
+        infoLayout->addWidget(m_infoTitle);
+        infoLayout->addWidget(separator);
+        infoLayout->addSpacing(8);
+        infoLayout->addWidget(m_infoDescription);
+        infoLayout->addSpacing(16);
+        infoLayout->addWidget(m_infoSchematic, 0, Qt::AlignHCenter);
+        infoLayout->addStretch();
+
+        hSplitter->addWidget(m_taskList);
+        hSplitter->addWidget(formScroll);
+        hSplitter->addWidget(m_infoPanel);
+        hSplitter->setStretchFactor(0, 0);
+        hSplitter->setStretchFactor(1, 1);
+        hSplitter->setStretchFactor(2, 0);
+        hSplitter->setSizes({180, 450, 300});
+
+        m_infoPanel->setVisible(false);
+
+        auto* bottomPanel = new QWidget(this);
+        auto* bottomLayout = new QVBoxLayout(bottomPanel);
+        bottomLayout->setContentsMargins(10, 8, 10, 8);
+        m_submitBtn = new QPushButton("提交配置", bottomPanel);
+        m_resultLabel = new QLabel("等待提交...", bottomPanel);
         m_resultLabel->setWordWrap(true);
-        mainLayout->addWidget(m_resultLabel);
+        bottomLayout->addWidget(m_submitBtn);
+        bottomLayout->addWidget(m_resultLabel);
+
+        vSplitter->addWidget(hSplitter);
+        vSplitter->addWidget(bottomPanel);
+        vSplitter->setStretchFactor(0, 4);
+        vSplitter->setStretchFactor(1, 1);
+        vSplitter->setSizes({440, 110});
+
+        mainLayout->addWidget(vSplitter);
 
         setupPythonProxy();
         discoverTasks();
@@ -292,6 +342,7 @@ class _ContextProxy:
 
         if (m_taskPages.contains(modulePath)) {
             m_stack->setCurrentIndex(m_taskPages[modulePath]);
+            populateInfoPanel(modulePath);
             return;
         }
 
@@ -319,6 +370,7 @@ class _ContextProxy:
                     + "\nraw: " + jsonStr.substr(0, 200));
             }
             QJsonObject schema = doc.object();
+            m_taskSchemas[modulePath] = schema;
 
             py::object proxy = m_pyProxyTemplate();
             page->renderFromSchema(schema, proxy, formInst);
@@ -337,6 +389,8 @@ class _ContextProxy:
                 page->applyProxyCommands();
             }
 
+            populateInfoPanel(modulePath);
+
         } catch (py::error_already_set& e) {
             qWarning() << "Failed to load task:" << e.what();
             QMessageBox::warning(this, "错误",
@@ -347,6 +401,42 @@ class _ContextProxy:
             QMessageBox::warning(this, "错误",
                 QString("加载任务失败: %1").arg(e.what()));
         }
+    }
+
+    void populateInfoPanel(const QString& modulePath) {
+        if (!m_taskSchemas.contains(modulePath)) return;
+        const QJsonObject& schema = m_taskSchemas[modulePath];
+
+        m_infoTitle->setText(schema["type"].toString());
+        m_infoDescription->setText(schema["description"].toString("暂无说明"));
+
+        QString schematicPath = schema["schematic"].toString();
+        QPixmap pix;
+        if (!schematicPath.isEmpty()) {
+            pix = QPixmap(schematicPath);
+            if (pix.isNull()) {
+                int idx = schematicPath.lastIndexOf("/tasks/");
+                QString relative = (idx >= 0) ? schematicPath.mid(idx + 7) : schematicPath;
+                for (const QString& base : {
+                    QDir::currentPath(),
+                    QStringLiteral("/home/linfeng/code/qt_py"),
+                }) {
+                    pix = QPixmap(base + "/" + relative);
+                    if (!pix.isNull()) break;
+                }
+            }
+        }
+
+        if (!pix.isNull()) {
+            int panelWidth = m_infoPanel->width() - 20;
+            int maxW = qMin(400, panelWidth);
+            m_infoSchematic->setPixmap(pix.scaledToWidth(maxW, Qt::SmoothTransformation));
+            m_infoSchematic->setFixedHeight(m_infoSchematic->pixmap().height());
+            m_infoSchematic->show();
+        } else {
+            m_infoSchematic->hide();
+        }
+        m_infoPanel->setVisible(true);
     }
 
     void onSubmit() {
@@ -360,8 +450,15 @@ class _ContextProxy:
     QListWidget* m_taskList;
     QStackedWidget* m_stack;
     QHash<QString, int> m_taskPages;
+    QHash<QString, QJsonObject> m_taskSchemas;
     QPushButton* m_submitBtn;
     QLabel* m_resultLabel;
+
+    QWidget* m_infoPanel;
+    QLabel* m_infoTitle;
+    QLabel* m_infoDescription;
+    QLabel* m_infoSchematic;
+
     py::object m_pyProxyTemplate;
 };
 

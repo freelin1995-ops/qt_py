@@ -21,9 +21,4 @@ target_include_directories(qt_py PRIVATE
     ${Python3_INCLUDE_DIRS}
 )
 
-add_custom_command(TARGET qt_py POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/tasks
-        $<TARGET_FILE_DIR:qt_py>/tasks
-    COMMENT "Copying tasks directory to build dir"
-)
+file(COPY ${CMAKE_SOURCE_DIR}/tasks DESTINATION ${CMAKE_BINARY_DIR})

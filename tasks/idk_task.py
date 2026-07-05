@@ -3,6 +3,7 @@ from ui_common import BaseForm, BoolField, TextField, EnumField, IntField, watch
 
 class IDontKnow(BaseForm):
     task_type = "i_dont_know"
+    description = "这是一个示例任务，演示各种字段类型的联动效果。"
 
     boolTest = BoolField(label="测试bool", default=False)
     stringTest = TextField(label="测试文本", default="test")

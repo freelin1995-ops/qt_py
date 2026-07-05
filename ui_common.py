@@ -1,5 +1,6 @@
 import inspect
 import copy
+import os
 
 
 class FieldProxy:
@@ -48,6 +49,11 @@ class EnumField(FieldProxy):
         super().__init__(label, "enum", default or (options[0] if options else ""), options=options)
 
 
+class FileField(FieldProxy):
+    def __init__(self, label, default="", file_filter="All Files (*)"):
+        super().__init__(label, "file", default, file_filter=file_filter)
+
+
 def watch(*fields):
     def decorator(func):
         func._watched_fields = fields
@@ -84,10 +90,21 @@ class BaseForm:
             }
             entry.update(field.extra)
             meta_fields.append(entry)
-        return {
+        meta = {
             "type": getattr(self, "task_type", "unknown"),
             "fields": meta_fields
         }
+        if hasattr(self.__class__, "description") and self.__class__.description:
+            meta["description"] = self.__class__.description
+        if hasattr(self.__class__, "schematic") and self.__class__.schematic:
+            rel_path = self.__class__.schematic
+            if not os.path.isabs(rel_path):
+                module_file = inspect.getfile(self.__class__)
+                module_dir = os.path.dirname(os.path.abspath(module_file))
+                meta["schematic"] = os.path.normpath(os.path.join(module_dir, rel_path))
+            else:
+                meta["schematic"] = rel_path
+        return meta
 
     def dispatch_change(self, field_name: str, new_value, cpp_context):
         for name, field in self._fields.items():
