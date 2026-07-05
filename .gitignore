@@ -1,0 +1,11 @@
+build/
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.app
+moc_*.cpp
+*.moc
+__pycache__/
+*.pyc
+.DS_Store
